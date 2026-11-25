@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hi! Working via AWS CDN</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>☁️</text></svg>">
+<style>
+  :root {
+    --sky: #eaf6ff;
+    --mist: #d3ecff;
+    --blue: #2f9bff;
+    --deep: #0d2b4a;
+    --soft: #5b7a99;
+    --white: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { min-height: 100%; }
+  body {
+    font-family: ui-rounded, "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    color: var(--deep);
+    background:
+      radial-gradient(60vmax 40vmax at 15% 0%, #ffffff 0%, transparent 60%),
+      radial-gradient(50vmax 40vmax at 100% 100%, var(--mist) 0%, transparent 60%),
+      var(--sky);
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    line-height: 1.5;
+  }
+  main { width: 100%; max-width: 640px; }
+
+  h1 {
+    font-size: clamp(2.6rem, 9vw, 4.6rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+  h1 span { color: var(--blue); }
+  .sub { margin-top: 12px; color: var(--soft); font-size: 1.1rem; max-width: 46ch; }
+
+  /* the one memorable thing: a request travelling to the edge */
+  .path {
+    position: relative;
+    margin: 44px 0 36px;
+    height: 96px;
+  }
+  .line {
+    position: absolute; left: 36px; right: 36px; top: 28px;
+    height: 4px; border-radius: 4px;
+    background: repeating-linear-gradient(90deg, var(--blue) 0 10px, transparent 10px 20px);
+    opacity: .45;
+  }
+  .dot {
+    position: absolute; top: 20px; left: 36px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 0 6px rgba(47,155,255,.22);
+    animation: travel 3.2s ease-in-out infinite;
+  }
+  @keyframes travel {
+    0%   { left: 36px; }
+    50%  { left: calc(50% - 10px); }
+    100% { left: calc(100% - 56px); }
+  }
+  .node {
+    position: absolute; top: 0;
+    width: 72px; text-align: center;
+    font-size: .85rem; color: var(--soft);
+  }
+  .node b {
+    display: grid; place-items: center;
+    width: 60px; height: 60px; margin: 0 auto 6px;
+    border-radius: 20px; background: var(--white);
+    box-shadow: 0 6px 18px rgba(47,155,255,.18);
+    font-size: 1.6rem;
+  }
+  .n1 { left: 0; }
+  .n2 { left: calc(50% - 36px); }
+  .n2 b { background: var(--blue); }
+  .n3 { right: 0; }
+
+  .card {
+    background: rgba(255,255,255,.85);
+    border-radius: 24px;
+    padding: 8px 24px;
+    box-shadow: 0 10px 30px rgba(47,155,255,.15);
+  }
+  .row {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--mist);
+  }
+  .row:last-child { border-bottom: 0; }
+  .row dt { color: var(--soft); }
+  .row dd { font-weight: 700; text-align: right; word-break: break-word; }
+
+  footer { margin-top: 20px; color: var(--soft); font-size: .9rem; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dot { animation: none; left: calc(50% - 10px); }
+  }
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hi! 👋<br>This page is working via <span>AWS CDN</span>.</h1>
+  <p class="sub">Your request hit a nearby edge server first. Not the origin.</p>
+
+  <div class="path" aria-hidden="true">
+    <div class="line"></div>
+    <div class="dot"></div>
+    <div class="node n1"><b>💻</b>You</div>
+    <div class="node n2"><b>☁️</b>Edge</div>
+    <div class="node n3"><b>🪣</b>Origin</div>
+  </div>
+
+  <section class="card" aria-label="Page status">
+    <dl>
+      <div class="row"><dt>Status</dt><dd id="status">Checking…</dd></div>
+      <div class="row"><dt>Edge location</dt><dd id="pop">–</dd></div>
+      <div class="row"><dt>Cache</dt><dd id="cache">–</dd></div>
+      <div class="row"><dt>Loaded at</dt><dd id="time">–</dd></div>
+    </dl>
+  </section>
+
+  <footer>Static page. Served from S3 through CloudFront.</footer>
+</main>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  $("time").textContent = new Date().toLocaleTimeString();
+
+  // Read CloudFront headers from this same page (works only when served by CloudFront)
+  fetch(location.href, { method: "HEAD", cache: "no-store" })
+    .then(function (res) {
+      var pop = res.headers.get("x-amz-cf-pop");
+      var cache = res.headers.get("x-cache");
+      $("status").textContent = res.ok ? "Online ✅" : "Error " + res.status;
+      $("pop").textContent = pop || "Not available";
+      $("cache").textContent = cache ? cache.split(" ")[0] : "Not available";
+    })
+    .catch(function () {
+      $("status").textContent = "Online ✅";
+      $("pop").textContent = "Not available";
+      $("cache").textContent = "Not available";
+    });
+</script>
+</body>
+</html>
